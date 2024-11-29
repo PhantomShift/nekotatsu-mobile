@@ -13,6 +13,9 @@ extern "C" {
     #[wasm_bindgen(js_namespace = ["window", "__TAURI__", "core"])]
     async fn invoke(cmd: &str, args: JsValue) -> JsValue;
 
+    #[wasm_bindgen(catch, js_namespace = ["window", "__TAURI__", "core"], js_name = "invoke")]
+    async fn try_invoke(cmd: &str, args: JsValue) -> Result<JsValue, JsValue>;
+
     #[wasm_bindgen(js_namespace = ["window", "__TAURI__", "event"], js_name = "listen")]
     async fn event_listen(event: &str, handler: &Closure<dyn FnMut(JsValue) -> ()>) -> JsValue;
 }
@@ -259,13 +262,13 @@ pub fn App() -> Element {
                 div {
                     button {
                         onclick: move |_| busy_run!({
-                            invoke("download_tachi_sources", JsValue::null()).await;
+                            let _ = try_invoke("download_tachi_sources", JsValue::null()).await;
                         }, "Cannot download, busy with other operations"),
                         "Download Tachiyomi Sources"
                     },
                     button {
                         onclick: move |_| busy_run!({
-                            invoke("update_kotatsu_parsers", JsValue::null()).await;
+                            let _ = try_invoke("update_kotatsu_parsers", JsValue::null()).await;
                         }, "Cannot update, busy with other operations"),
                         "Update Kotatsu Parsers"
                     }
@@ -307,7 +310,7 @@ pub fn App() -> Element {
                 div {
                     button {
                         onclick: move |_| busy_run!({
-                            invoke("convert_backup", JsValue::null()).await;
+                            let _ = try_invoke("convert_backup", JsValue::null()).await;
                         }, "Busy with other operations, please wait"),
                         "Convert"
                     }
