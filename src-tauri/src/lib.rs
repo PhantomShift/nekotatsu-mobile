@@ -55,7 +55,7 @@ async fn download_file(app: &AppHandle, link: &str, destination: &Path) -> Resul
                 }
                 drop(writer);
 
-                app.dialog().message("Download complete!");
+                app.dialog().message("Download complete!").blocking_show();
 
                 Ok(handle)
             } else {
@@ -65,7 +65,7 @@ async fn download_file(app: &AppHandle, link: &str, destination: &Path) -> Resul
         Err(e) => return Err(e.to_string()),
     };
     result.inspect_err(|e| {
-        app.dialog().message(&format!("Error downloading file: {e}"));
+        app.dialog().message(&format!("Error downloading file: {e}")).blocking_show();
     })
 }
 
@@ -137,7 +137,7 @@ async fn update_kotatsu_parsers(app: AppHandle) -> Result<(), String> {
         )
         .map_err(|e| e.to_string())?;
     nekotatsu_core::kotatsu::update_parsers(&zipfile, &parsers_file).map_err(|e| {
-        app.dialog().message(format!("Failed to update parsers: {e}"));
+        app.dialog().message(format!("Failed to update parsers: {e}")).blocking_show();
         e.to_string()
     })?;
 
@@ -182,7 +182,7 @@ async fn pick_save_path(
         if !extension_matches {
             app.dialog()
                 .message("File must be a .zip file")
-                .show(|_| ());
+                .blocking_show();
             return Ok(None);
         }
         state
@@ -231,7 +231,8 @@ async fn convert_backup(
                 )
                 .expect("backup file should exist");
             let backup = nekotatsu_core::decode_neko_backup(backup_file).map_err(|e| {
-                app.dialog().message(&format!("Error decoding backup, was this a valid tachiyomi backup? Original error: {e:?}"));
+                app.dialog().message(&format!("Error decoding backup, was this a valid tachiyomi backup? Original error: {e:?}"))
+                    .blocking_show();
                 e.to_string()
             })?;
 
@@ -248,7 +249,8 @@ async fn convert_backup(
                 nekotatsu_core::MangaConverter::try_from_files(parsers_file, sources_file)
                     .map_err(|e| {
                         app.dialog()
-                            .message(&format!("Error source/parsers files: {e:?}"));
+                            .message(&format!("Error source/parsers files: {e:?}"))
+                            .blocking_show();
                         e.to_string()
                     })?;
 
@@ -268,7 +270,8 @@ async fn convert_backup(
                 )
                 .map_err(|e| {
                     app.dialog()
-                        .message(&format!("Error saving converted backup: {e:?}"));
+                        .message(&format!("Error saving converted backup: {e:?}"))
+                            .blocking_show();
                     e.to_string()
                 })?;
 
