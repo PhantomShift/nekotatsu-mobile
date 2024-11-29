@@ -2,14 +2,21 @@ use std::{fs::File, io::{BufWriter, Write}, path::Path, sync::Mutex};
 
 use futures_util::TryStreamExt;
 use nekotatsu_core::Logger;
+use serde::{Deserialize, Serialize};
 use tauri::{http::StatusCode, AppHandle, Emitter, Manager};
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons};
 use tauri_plugin_fs::{FilePath, FsExt, OpenOptions};
+use tauri_plugin_store::StoreExt;
 
 static TACHI_DOWNLOAD_LINK: &str =
     "https://raw.githubusercontent.com/keiyoushi/extensions/repo/index.min.json";
 static KOTATSU_DOWNLOAD_LINK: &str =
     "https://github.com/KotatsuApp/kotatsu-parsers/archive/refs/heads/master.zip";
+
+#[derive(Serialize, Deserialize, Clone, Default)]
+pub struct AppSettings {
+    pub custom_extensions_url: Option<String>,
+}
 
 #[derive(Default)]
 struct PathState {
@@ -78,7 +85,17 @@ async fn download_tachi_sources(app: AppHandle) -> Result<(), String> {
         }
     }
 
-    download_file(&app, TACHI_DOWNLOAD_LINK, &path)
+    let store = app.store("storage.json")
+        .expect("store should be openable");
+    
+    let link = store.get("settings")
+        .map(|val| serde_json::from_value::<AppSettings>(val).unwrap_or_default())
+        .map(|settings | settings.custom_extensions_url)
+        .flatten()
+        .unwrap_or(TACHI_DOWNLOAD_LINK.to_string());
+    
+
+    download_file(&app, &link, &path)
         .await
         .map(|_| ())
 }
