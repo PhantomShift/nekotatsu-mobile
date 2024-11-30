@@ -5,6 +5,11 @@ a tool for converting Tachiyomi backups into backups readable by [Kotatsu](https
 
 I am aware that the UI is *incredibly* scuffed, it is very much work in progress.
 
+Note that any bugs/issues unrelated to the GUI itself,
+i.e. issues with actually converting the backups,
+should be reported in the [nekotatsu repository](https://github.com/PhantomShift/nekotatsu) rather than here.
+Otherwise, features and bugs specific to the GUI application should be reported here.
+
 Also note that this can double as a frontend for desktop, but is not the main
 focus of the project at this stage. Regardless, it is trivial to try out with
 `tauri dev` (or whatever the appropriate command is for your installation of
