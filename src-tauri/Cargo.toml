@@ -28,5 +28,4 @@ tauri-plugin-fs = "2"
 tauri-plugin-dialog = "2"
 zip = "2.2.1"
 tauri-plugin-store = "2"
-futures-util = "0.3.31"
 

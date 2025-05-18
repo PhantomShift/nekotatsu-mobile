@@ -1,6 +1,5 @@
 use std::{fs::File, io::{BufWriter, Write}, path::Path, sync::Mutex};
 
-use futures_util::TryStreamExt;
 use nekotatsu_core::Logger;
 use serde::{Deserialize, Serialize};
 use tauri::{http::StatusCode, AppHandle, Emitter, Manager};
@@ -40,7 +39,7 @@ impl<'a> nekotatsu_core::Logger for AppLogger<'a> {
 async fn download_file(app: &AppHandle, link: &str, destination: &Path) -> Result<File, String> {
     let response = tauri_plugin_http::reqwest::get(link).await;
     let result = match response {
-        Ok(resp) => {
+        Ok(mut resp) => {
             if resp.status() == StatusCode::OK {
                 let options = OpenOptions::new()
                     .write(true)
@@ -49,8 +48,7 @@ async fn download_file(app: &AppHandle, link: &str, destination: &Path) -> Resul
                     .to_owned();
                 let mut handle = app.fs().open(destination, options).expect("failed to open file path for saving; do we have write permissions?");
                 let mut writer = BufWriter::new(&mut handle);
-                let mut stream = resp.bytes_stream();
-                while let Some(bytes) = stream.try_next().await.map_err(|e| e.to_string())? {
+                while let Some(bytes) = resp.chunk().await.map_err(|e| e.to_string())? {
                     writer.write_all(&bytes).map_err(|e| e.to_string())?;
                 }
                 drop(writer);
