@@ -2,7 +2,7 @@
 
 use apply::Apply;
 use dioxus::prelude::*;
-use dioxus_logger::tracing::info;
+use dioxus::logger::tracing::info;
 use futures::StreamExt;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -190,7 +190,7 @@ pub fn App() -> Element {
     let mut settings = use_signal(|| AppSettings::default());
     let current_page = use_signal(|| String::from("convert"));
     
-    let log_coroutine = use_coroutine(|mut rx: UnboundedReceiver<String>| async move {
+    let log_coroutine = use_coroutine(move |mut rx: UnboundedReceiver<String>| async move {
         while let Some(msg) = rx.next().await {
             info!("{}", &msg);
             logs.write().extend([&msg, "\n"]);
@@ -251,7 +251,7 @@ pub fn App() -> Element {
     }
 
     rsx! {
-        link { rel: "stylesheet", href: "styles.css" }
+        link { rel: "stylesheet", href: "/assets/styles.css" }
         main {
             class: "container",
             AppPage {
@@ -335,7 +335,7 @@ pub fn App() -> Element {
                     }
                     img {
                         width: "200px",
-                        src: "logo.svg"
+                        src: "/assets/logo.svg"
                     }
                     p {
                         "A GUI frontend for nekotatsu, a tool to convert Tachiyomi backups"
