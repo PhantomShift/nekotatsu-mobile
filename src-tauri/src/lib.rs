@@ -33,7 +33,7 @@ struct AppLogger<'a> {
 }
 
 impl<'a> nekotatsu_core::Logger for AppLogger<'a> {
-    fn log_info(&mut self, message: &str) -> () {
+    fn log_info(&mut self, message: &str) {
         self.app
             .emit("nekotatsu_log", message)
             .expect("emit should work")
@@ -72,7 +72,7 @@ async fn download_file(app: &AppHandle, link: &str, destination: &Path) -> Resul
     };
     result.inspect_err(|e| {
         app.dialog()
-            .message(&format!("Error downloading file: {e}"))
+            .message(format!("Error downloading file: {e}"))
             .blocking_show();
     })
 }
@@ -98,8 +98,7 @@ async fn download_tachi_sources(app: AppHandle) -> Result<(), String> {
     let link = store
         .get("settings")
         .map(|val| serde_json::from_value::<AppSettings>(val).unwrap_or_default())
-        .map(|settings| settings.custom_extensions_url)
-        .flatten()
+        .and_then(|settings| settings.custom_extensions_url)
         .unwrap_or(TACHI_DOWNLOAD_LINK.to_string());
 
     download_file(&app, &link, &path).await.map(|_| ())
@@ -181,9 +180,7 @@ async fn pick_save_path(
         .blocking_save_file()
     {
         let extension_matches = match file_path.clone() {
-            FilePath::Path(path) => path
-                .extension()
-                .map_or(false, |ext| ext.to_str() == Some("zip")),
+            FilePath::Path(path) => path.extension().is_some_and(|ext| ext == "zip"),
             FilePath::Url(url) => url.as_str().ends_with(".zip"),
         };
         if !extension_matches {
@@ -238,7 +235,7 @@ async fn convert_backup(
                 )
                 .expect("backup file should exist");
             let backup = nekotatsu_core::decode_neko_backup(backup_file).map_err(|e| {
-                app.dialog().message(&format!("Error decoding backup, was this a valid tachiyomi backup? Original error: {e:?}"))
+                app.dialog().message(format!("Error decoding backup, was this a valid tachiyomi backup? Original error: {e:?}"))
                     .blocking_show();
                 e.to_string()
             })?;
@@ -256,7 +253,7 @@ async fn convert_backup(
                 nekotatsu_core::MangaConverter::try_from_files(parsers_file, sources_file)
                     .map_err(|e| {
                         app.dialog()
-                            .message(&format!("Error source/parsers files: {e:?}"))
+                            .message(format!("Error source/parsers files: {e:?}"))
                             .blocking_show();
                         e.to_string()
                     })?;
@@ -277,7 +274,7 @@ async fn convert_backup(
                 )
                 .map_err(|e| {
                     app.dialog()
-                        .message(&format!("Error saving converted backup: {e:?}"))
+                        .message(format!("Error saving converted backup: {e:?}"))
                         .blocking_show();
                     e.to_string()
                 })?;
@@ -312,11 +309,11 @@ async fn convert_backup(
                             .map_err(|e| e.to_string())?;
                     }
                     Ok(_) => {
-                        let _ = logger
+                        logger
                             .log_info(&format!("{name} is empty, ommitted from converted backup"));
                     }
                     Err(e) => {
-                        let _ = logger.log_info(&format!(
+                        logger.log_info(&format!(
                             "[WARNING] Error occurred processing {name}, ommitted from converted backup, original error: {e}"
                         ));
                     }

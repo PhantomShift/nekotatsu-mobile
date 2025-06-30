@@ -153,10 +153,10 @@ pub fn SettingsPage(settings: Signal<AppSettings>, current_page: Signal<String>)
 }
 
 pub fn App() -> Element {
-    let mut picked_backup = use_signal(|| String::new());
-    let mut picked_save_path = use_signal(|| String::new());
-    let mut logs = use_signal(|| String::new());
-    let mut settings = use_signal(|| AppSettings::default());
+    let mut picked_backup = use_signal(String::new);
+    let mut picked_save_path = use_signal(String::new);
+    let mut logs = use_signal(String::new);
+    let mut settings = use_signal(AppSettings::default);
     let current_page = use_signal(|| String::from("convert"));
 
     let log_coroutine = use_coroutine(move |mut rx: UnboundedReceiver<String>| async move {
@@ -173,7 +173,7 @@ pub fn App() -> Element {
     };
 
     use_future(move || async move {
-        let log_closure = Closure::<dyn FnMut(JsValue) -> ()>::new(on_logged);
+        let log_closure = Closure::<dyn FnMut(JsValue)>::new(on_logged);
         event_listen("nekotatsu_log", &log_closure).await;
         log_closure.forget();
     });
