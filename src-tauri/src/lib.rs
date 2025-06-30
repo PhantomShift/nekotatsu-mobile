@@ -33,18 +33,18 @@ struct AppLogger {
 }
 
 impl AppLogger {
-    fn log_info(&self, message: &str) {
+    fn log_info<S: Into<String>>(&self, message: S) {
         self.app
-            .emit("nekotatsu_log", message)
+            .emit("nekotatsu_log", message.into())
             .expect("emit should work")
     }
 }
 
 impl std::io::Write for &AppLogger {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        let msg = String::from_utf8(buf.to_vec()).map_err(std::io::Error::other)?;
+        let msg = String::from_utf8(buf.trim_ascii().to_vec()).map_err(std::io::Error::other)?;
         self.app
-            .emit("nekotatsu_log", msg.trim())
+            .emit("nekotatsu_log", msg)
             .map_err(std::io::Error::other)
             .and(Ok(buf.len()))
     }
@@ -337,11 +337,10 @@ async fn convert_backup(
                             .map_err(|e| e.to_string())?;
                     }
                     Ok(_) => {
-                        logger
-                            .log_info(&format!("{name} is empty, ommitted from converted backup"));
+                        logger.log_info(format!("{name} is empty, ommitted from converted backup"));
                     }
                     Err(e) => {
-                        logger.log_info(&format!(
+                        logger.log_info(format!(
                             "[WARNING] Error occurred processing {name}, ommitted from converted backup, original error: {e}"
                         ));
                     }
