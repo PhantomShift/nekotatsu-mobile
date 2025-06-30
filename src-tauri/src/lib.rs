@@ -1,4 +1,9 @@
-use std::{fs::File, io::{BufWriter, Write}, path::Path, sync::Mutex};
+use std::{
+    fs::File,
+    io::{BufWriter, Write},
+    path::Path,
+    sync::Mutex,
+};
 
 use nekotatsu_core::Logger;
 use serde::{Deserialize, Serialize};
@@ -46,7 +51,10 @@ async fn download_file(app: &AppHandle, link: &str, destination: &Path) -> Resul
                     .create(true)
                     .truncate(true)
                     .to_owned();
-                let mut handle = app.fs().open(destination, options).expect("failed to open file path for saving; do we have write permissions?");
+                let mut handle = app
+                    .fs()
+                    .open(destination, options)
+                    .expect("failed to open file path for saving; do we have write permissions?");
                 let mut writer = BufWriter::new(&mut handle);
                 while let Some(bytes) = resp.chunk().await.map_err(|e| e.to_string())? {
                     writer.write_all(&bytes).map_err(|e| e.to_string())?;
@@ -63,7 +71,9 @@ async fn download_file(app: &AppHandle, link: &str, destination: &Path) -> Resul
         Err(e) => return Err(e.to_string()),
     };
     result.inspect_err(|e| {
-        app.dialog().message(&format!("Error downloading file: {e}")).blocking_show();
+        app.dialog()
+            .message(&format!("Error downloading file: {e}"))
+            .blocking_show();
     })
 }
 
@@ -83,19 +93,16 @@ async fn download_tachi_sources(app: AppHandle) -> Result<(), String> {
         }
     }
 
-    let store = app.store("storage.json")
-        .expect("store should be openable");
-    
-    let link = store.get("settings")
+    let store = app.store("storage.json").expect("store should be openable");
+
+    let link = store
+        .get("settings")
         .map(|val| serde_json::from_value::<AppSettings>(val).unwrap_or_default())
-        .map(|settings | settings.custom_extensions_url)
+        .map(|settings| settings.custom_extensions_url)
         .flatten()
         .unwrap_or(TACHI_DOWNLOAD_LINK.to_string());
-    
 
-    download_file(&app, &link, &path)
-        .await
-        .map(|_| ())
+    download_file(&app, &link, &path).await.map(|_| ())
 }
 
 #[tauri::command]
@@ -135,7 +142,9 @@ async fn update_kotatsu_parsers(app: AppHandle) -> Result<(), String> {
         )
         .map_err(|e| e.to_string())?;
     nekotatsu_core::kotatsu::update_parsers(&zipfile, &parsers_file).map_err(|e| {
-        app.dialog().message(format!("Failed to update parsers: {e}")).blocking_show();
+        app.dialog()
+            .message(format!("Failed to update parsers: {e}"))
+            .blocking_show();
         e.to_string()
     })?;
 
@@ -269,7 +278,7 @@ async fn convert_backup(
                 .map_err(|e| {
                     app.dialog()
                         .message(&format!("Error saving converted backup: {e:?}"))
-                            .blocking_show();
+                        .blocking_show();
                     e.to_string()
                 })?;
 

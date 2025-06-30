@@ -1,8 +1,8 @@
 #![allow(non_snake_case)]
 
 use apply::Apply;
-use dioxus::prelude::*;
 use dioxus::logger::tracing::info;
+use dioxus::prelude::*;
 use futures::StreamExt;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -48,16 +48,9 @@ pub struct AppSettings {
 }
 
 #[component]
-pub fn AppPage(
-    page_id: String,
-    current_page: Signal<String>,
-    children: Element
-) -> Element {
+pub fn AppPage(page_id: String, current_page: Signal<String>, children: Element) -> Element {
     rsx! {
-        div {
-            hidden: current_page.read().to_owned() != page_id,
-            { children }
-        }
+        div { hidden: current_page.read().to_owned() != page_id, {children} }
     }
 }
 
@@ -67,14 +60,9 @@ pub fn PageSelect(
     ids: Vec<(&'static str, &'static str)>,
 ) -> Element {
     rsx! {
-        div {
-            class: "light-contrast",
-            "popover": "auto",
-            id: "page-select",
-            div {
-                display: "flex",
-                flex_direction: "column",
-                for (id, display) in ids {
+        div { class: "light-contrast", "popover": "auto", id: "page-select",
+            div { display: "flex", flex_direction: "column",
+                for (id , display) in ids {
                     button {
                         "popovertarget": "page-select",
                         onclick: move |_| current_page.set(id.to_string()),
@@ -87,14 +75,9 @@ pub fn PageSelect(
 }
 
 #[component]
-pub fn LogsPage(
-    current_page: Signal<String>,
-    mut log: Signal<String>
-) -> Element {
+pub fn LogsPage(current_page: Signal<String>, mut log: Signal<String>) -> Element {
     rsx! {
-        AppPage {
-            current_page: current_page,
-            page_id: "logs",
+        AppPage { current_page, page_id: "logs",
             h1 { "Logs" }
             p {
                 class: "light-contrast",
@@ -103,9 +86,7 @@ pub fn LogsPage(
                 text_align: "left",
                 overflow_wrap: "anywhere",
                 padding: "20px",
-                pre {
-                    "{log}"
-                }
+                pre { "{log}" }
             }
             button {
                 onclick: move |_| {
@@ -119,22 +100,18 @@ pub fn LogsPage(
 }
 
 #[component]
-pub fn SettingsPage(
-    settings: Signal<AppSettings>,
-    current_page: Signal<String>,
-) -> Element {
-
+pub fn SettingsPage(settings: Signal<AppSettings>, current_page: Signal<String>) -> Element {
     let initial_settings = use_resource(|| async move {
         let store = store_load("storage.json").await;
-        store.get("settings").await
+        store
+            .get("settings")
+            .await
             .apply(serde_wasm_bindgen::from_value::<AppSettings>)
             .unwrap_or_default()
     });
 
     rsx! {
-        AppPage {
-            current_page,
-            page_id: "settings",
+        AppPage { current_page, page_id: "settings",
             h1 { "Settings" }
             form {
                 text_align: "left",
@@ -142,15 +119,11 @@ pub fn SettingsPage(
                 onsubmit: move |ev| {
                     ev.stop_propagation();
                     info!("Got: {:?}", ev.values());
-                    // Yucky, will need to change
-                    // if more settings are added
                     for (name, val) in ev.values().iter() {
                         if name == "custom_extensions_url" {
                             settings.write().custom_extensions_url = match val.0[0].clone() {
-                                val if val.is_empty() => {
-                                    None
-                                },
-                                val => Some(val)
+                                val if val.is_empty() => None,
+                                val => Some(val),
                             };
                         }
                     }
@@ -161,9 +134,7 @@ pub fn SettingsPage(
                         store.set("settings", to_save).await;
                     });
                 },
-                p {
-                    "Custom Tachiyomi Extensions Download URL"
-                }
+                p { "Custom Tachiyomi Extensions Download URL" }
                 input {
                     style: "width: 90%;",
                     display: "block",
@@ -171,11 +142,9 @@ pub fn SettingsPage(
                     placeholder: "https://raw.githubusercontent.com/keiyoushi/extensions/repo/index.min.json",
                     "type": "url",
                     value: match &*initial_settings.read() {
-                        Some(settings) => {
-                            settings.custom_extensions_url.clone().unwrap_or_default()
-                        },
-                        None => { String::new() }
-                    }
+                        Some(settings) => settings.custom_extensions_url.clone().unwrap_or_default(),
+                        None => String::new(),
+                    },
                 }
                 button { "Save" }
             }
@@ -189,7 +158,7 @@ pub fn App() -> Element {
     let mut logs = use_signal(|| String::new());
     let mut settings = use_signal(|| AppSettings::default());
     let current_page = use_signal(|| String::from("convert"));
-    
+
     let log_coroutine = use_coroutine(move |mut rx: UnboundedReceiver<String>| async move {
         while let Some(msg) = rx.next().await {
             info!("{}", &msg);
@@ -211,7 +180,9 @@ pub fn App() -> Element {
 
     use_future(move || async move {
         let store = store_load("storage.json").await;
-        let loaded_settings = store.get("settings").await
+        let loaded_settings = store
+            .get("settings")
+            .await
             .apply(serde_wasm_bindgen::from_value::<AppSettings>)
             .unwrap_or_default();
 
@@ -221,7 +192,7 @@ pub fn App() -> Element {
     // This seems *really* weird/overkill but my brain is too small/lazy
     // to do this properly with an arc mutex or whatever
     // and shouldn't realistically matter
-    let mut busy =  use_signal(|| false);
+    let mut busy = use_signal(|| false);
 
     macro_rules! busy_run {
         ($task:block, $busy_message:expr) => {
@@ -252,91 +223,87 @@ pub fn App() -> Element {
 
     rsx! {
         link { rel: "stylesheet", href: "/assets/styles.css" }
-        main {
-            class: "container",
-            AppPage {
-                current_page: current_page,
-                page_id: "convert",
+        main { class: "container",
+            AppPage { current_page, page_id: "convert",
 
                 h1 { "Nekotatsu" }
                 div {
                     button {
-                        onclick: move |_| busy_run!({
-                            let _ = try_invoke("download_tachi_sources", JsValue::null()).await;
-                        }, "Cannot download, busy with other operations"),
+                        onclick: move |_| {
+                            busy_run!(
+                                { let _ = try_invoke("download_tachi_sources", JsValue::null()). await; },
+                                "Cannot download, busy with other operations"
+                            )
+                        },
                         "Download Tachiyomi Sources"
-                    },
+                    }
                     button {
-                        onclick: move |_| busy_run!({
-                            let _ = try_invoke("update_kotatsu_parsers", JsValue::null()).await;
-                        }, "Cannot update, busy with other operations"),
+                        onclick: move |_| {
+                            busy_run!(
+                                { let _ = try_invoke("update_kotatsu_parsers", JsValue::null()). await; },
+                                "Cannot update, busy with other operations"
+                            )
+                        },
                         "Update Kotatsu Parsers"
                     }
                 }
-                div {
-                    display: "flex",
-                    flex_direction: "column",
+                div { display: "flex", flex_direction: "column",
                     button {
-                        onclick: move |_| busy_run!({
-                            let res = invoke("pick_backup", JsValue::null()).await;
-                            if let Some(path) = res.as_string() {
-                                picked_backup.set(path);
-                            }
-                        }, "Busy with other operations"),
+                        onclick: move |_| {
+                            busy_run!(
+                                { let res = invoke("pick_backup", JsValue::null()). await; if let Some(path)
+                                = res.as_string() { picked_backup.set(path); } },
+                                "Busy with other operations"
+                            )
+                        },
                         "Pick Backup"
                     }
                     input {
                         readonly: true,
                         width: "100%",
                         overflow_wrap: "anywhere",
-                        value: "{picked_backup}"
+                        value: "{picked_backup}",
                     }
                     button {
-                        onclick: move |_| busy_run!({
-                            let res = invoke("pick_save_path", JsValue::null()).await;
-                            if let Some(path) = res.as_string() {
-                                picked_save_path.set(path);
-                            }
-                        }, "Busy with other operations"),
+                        onclick: move |_| {
+                            busy_run!(
+                                { let res = invoke("pick_save_path", JsValue::null()). await; if let
+                                Some(path) = res.as_string() { picked_save_path.set(path); } },
+                                "Busy with other operations"
+                            )
+                        },
                         "Pick Save Path"
                     }
                     input {
                         readonly: true,
                         width: "100%",
                         overflow_wrap: "anywhere",
-                        value: "{picked_save_path}"
+                        value: "{picked_save_path}",
                     }
                 }
                 div {
                     button {
-                        onclick: move |_| busy_run!({
-                            let _ = try_invoke("convert_backup", JsValue::null()).await;
-                        }, "Busy with other operations, please wait"),
+                        onclick: move |_| {
+                            busy_run!(
+                                { let _ = try_invoke("convert_backup", JsValue::null()). await; },
+                                "Busy with other operations, please wait"
+                            )
+                        },
                         "Convert"
                     }
                 }
             }
-            LogsPage {
-                log: logs,
-                current_page
-            }
-            SettingsPage {
-                current_page,
-                settings
-            }
-            AppPage {
-                current_page,
-                page_id: "about",
+            LogsPage { log: logs, current_page }
+            SettingsPage { current_page, settings }
+            AppPage { current_page, page_id: "about",
                 div {
                     h1 { "About" }
                     h2 { "Nekotatsu Mobile" }
                     p {
-                        "Version: " {env!("CARGO_PKG_VERSION")}
+                        "Version: "
+                        {env!("CARGO_PKG_VERSION")}
                     }
-                    img {
-                        width: "200px",
-                        src: "/assets/logo.svg"
-                    }
+                    img { width: "200px", src: "/assets/logo.svg" }
                     p {
                         "A GUI frontend for nekotatsu, a tool to convert Tachiyomi backups"
                         " into backups readable by Kotatsu."
