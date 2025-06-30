@@ -27,11 +27,10 @@ struct PathState {
     save_path: Option<FilePath>,
 }
 
+#[derive(Debug, Clone)]
 struct AppLogger {
     app: AppHandle,
 }
-
-struct AppLoggerMaker(AppHandle);
 
 impl AppLogger {
     fn log_info(&self, message: &str) {
@@ -41,7 +40,7 @@ impl AppLogger {
     }
 }
 
-impl std::io::Write for AppLogger {
+impl std::io::Write for &AppLogger {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
         let msg = String::from_utf8(buf.to_vec()).map_err(std::io::Error::other)?;
         self.app
@@ -54,12 +53,10 @@ impl std::io::Write for AppLogger {
     }
 }
 
-impl tracing_subscriber::fmt::MakeWriter<'_> for AppLoggerMaker {
-    type Writer = std::io::LineWriter<AppLogger>;
-    fn make_writer(&self) -> Self::Writer {
-        std::io::LineWriter::new(AppLogger {
-            app: self.0.clone(),
-        })
+impl<'a> tracing_subscriber::fmt::MakeWriter<'a> for AppLogger {
+    type Writer = std::io::LineWriter<&'a AppLogger>;
+    fn make_writer(&'a self) -> Self::Writer {
+        std::io::LineWriter::new(self)
     }
 }
 
@@ -285,7 +282,7 @@ async fn convert_backup(
             let result = nekotatsu_core::tracing::subscriber::with_default(
                 tracing_subscriber::fmt::fmt()
                     .compact()
-                    .with_writer(AppLoggerMaker(app.clone()))
+                    .with_writer(logger.clone())
                     .with_ansi(false)
                     .with_file(false)
                     .without_time()
