@@ -5,7 +5,6 @@ use std::{
     sync::Mutex,
 };
 
-use nekotatsu_core::Logger;
 use serde::{Deserialize, Serialize};
 use tauri::{http::StatusCode, AppHandle, Emitter, Manager};
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons};
@@ -28,15 +27,39 @@ struct PathState {
     save_path: Option<FilePath>,
 }
 
-struct AppLogger<'a> {
-    app: &'a AppHandle,
+struct AppLogger {
+    app: AppHandle,
 }
 
-impl<'a> nekotatsu_core::Logger for AppLogger<'a> {
-    fn log_info(&mut self, message: &str) {
+struct AppLoggerMaker(AppHandle);
+
+impl AppLogger {
+    fn log_info(&self, message: &str) {
         self.app
             .emit("nekotatsu_log", message)
             .expect("emit should work")
+    }
+}
+
+impl std::io::Write for AppLogger {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        let msg = String::from_utf8(buf.to_vec()).map_err(std::io::Error::other)?;
+        self.app
+            .emit("nekotatsu_log", msg.trim())
+            .map_err(std::io::Error::other)
+            .and(Ok(buf.len()))
+    }
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
+impl tracing_subscriber::fmt::MakeWriter<'_> for AppLoggerMaker {
+    type Writer = std::io::LineWriter<AppLogger>;
+    fn make_writer(&self) -> Self::Writer {
+        std::io::LineWriter::new(AppLogger {
+            app: self.0.clone(),
+        })
     }
 }
 
@@ -258,9 +281,17 @@ async fn convert_backup(
                         e.to_string()
                     })?;
 
-            let mut logger = AppLogger { app: &app };
-
-            let result = converter.convert_backup(backup, "Library", &mut logger, &mut |_| true);
+            let logger = AppLogger { app: app.clone() };
+            let result = nekotatsu_core::tracing::subscriber::with_default(
+                tracing_subscriber::fmt::fmt()
+                    .compact()
+                    .with_writer(AppLoggerMaker(app.clone()))
+                    .with_ansi(false)
+                    .with_file(false)
+                    .without_time()
+                    .finish(),
+                || converter.convert_backup(backup, "Library", &mut |_| true),
+            );
 
             let save_file = app
                 .fs()
