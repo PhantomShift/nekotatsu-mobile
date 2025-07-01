@@ -19,6 +19,7 @@ static KOTATSU_DOWNLOAD_LINK: &str =
 #[derive(Serialize, Deserialize, Clone, Default)]
 pub struct AppSettings {
     pub custom_extensions_url: Option<String>,
+    pub custom_parsers_url: Option<String>,
 }
 
 #[derive(Default)]
@@ -136,7 +137,14 @@ async fn update_kotatsu_parsers(app: AppHandle) -> Result<(), String> {
             .blocking_show()
     };
     if should_download {
-        let mut zipfile = download_file(&app, KOTATSU_DOWNLOAD_LINK, &path).await?;
+        let store = app.store("storage.json").expect("store should be openable");
+        let link = store
+            .get("settings")
+            .map(|val| serde_json::from_value::<AppSettings>(val).unwrap_or_default())
+            .and_then(|settings| settings.custom_parsers_url)
+            .unwrap_or(KOTATSU_DOWNLOAD_LINK.to_string());
+
+        let mut zipfile = download_file(&app, &link, &path).await?;
         zipfile.flush().map_err(|e| e.to_string())?;
         drop(zipfile);
     }

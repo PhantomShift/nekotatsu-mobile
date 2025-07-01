@@ -1,6 +1,9 @@
 #![allow(non_snake_case)]
 
+use std::sync::LazyLock;
+
 use apply::Apply;
+use bevy_reflect::{GetField, Reflect, StructInfo, Typed};
 use dioxus::logger::tracing::info;
 use dioxus::prelude::*;
 use futures::StreamExt;
@@ -42,15 +45,31 @@ struct TauriEvent<T> {
     payload: T,
 }
 
-#[derive(Serialize, Deserialize, Clone, Default)]
+#[derive(Reflect)]
+struct EntryPlaceholder(&'static str);
+#[derive(Reflect)]
+struct EntryTitle(&'static str);
+
+#[derive(Debug, Reflect, Serialize, Deserialize, Clone, Default)]
 pub struct AppSettings {
+    #[reflect(@EntryPlaceholder("https://github.com/keiyoushi/extensions/raw/refs/heads/repo/index.min.json"))]
+    #[reflect(@EntryTitle("Tachiyomi Sources URL"))]
     pub custom_extensions_url: Option<String>,
+
+    #[reflect(@EntryPlaceholder("https://github.com/KotatsuApp/kotatsu-parsers/archive/refs/heads/master.zip"))]
+    #[reflect(@EntryTitle("Kotatsu Parsers URL"))]
+    pub custom_parsers_url: Option<String>,
 }
 
 #[component]
 pub fn AppPage(page_id: String, current_page: Signal<String>, children: Element) -> Element {
     rsx! {
-        div { hidden: current_page.read().to_owned() != page_id, {children} }
+        div {
+            hidden: current_page.read().to_owned() != page_id,
+            height: "100%",
+            padding: "1em",
+            {children}
+        }
     }
 }
 
@@ -78,22 +97,30 @@ pub fn PageSelect(
 pub fn LogsPage(current_page: Signal<String>, mut log: Signal<String>) -> Element {
     rsx! {
         AppPage { current_page, page_id: "logs",
-            h1 { "Logs" }
-            p {
-                class: "light-contrast",
-                overflow_y: "scroll",
-                height: "200px",
-                text_align: "left",
-                overflow_wrap: "anywhere",
-                padding: "20px",
-                pre { "{log}" }
-            }
-            button {
-                onclick: move |_| {
-                    info!("Clearing log: {}", log.read());
-                    log.set(String::new());
-                },
-                "Clear Logs"
+            div {
+                height: "100%",
+                align_content: "center",
+                display: "flex",
+                flex_direction: "column",
+                h1 { "Logs" }
+                p {
+                    display: "flex",
+                    flex_grow: 1,
+                    class: "light-contrast",
+                    overflow: "auto",
+                    // height: "200px",
+                    text_align: "left",
+                    overflow_wrap: "anywhere",
+                    padding: "20px",
+                    pre { "{log}" }
+                }
+                button {
+                    onclick: move |_| {
+                        info!("Clearing log: {}", log.read());
+                        log.set(String::new());
+                    },
+                    "Clear Logs"
+                }
             }
         }
     }
@@ -101,13 +128,56 @@ pub fn LogsPage(current_page: Signal<String>, mut log: Signal<String>) -> Elemen
 
 #[component]
 pub fn SettingsPage(settings: Signal<AppSettings>, current_page: Signal<String>) -> Element {
-    let initial_settings = use_resource(|| async move {
+    static APP_SETTINGS_INFO: LazyLock<&StructInfo> = LazyLock::new(|| {
+        AppSettings::type_info()
+            .as_struct()
+            .expect("AppSettings should be a struct")
+    });
+
+    let initial_settings = use_resource(move || async move {
         let store = store_load("storage.json").await;
         store
             .get("settings")
             .await
             .apply(serde_wasm_bindgen::from_value::<AppSettings>)
             .unwrap_or_default()
+    });
+
+    #[component]
+    fn SettingsEntry(name: String, initial_settings: Resource<AppSettings>) -> Element {
+        rsx! {
+            p {
+                {
+                    APP_SETTINGS_INFO
+                        .field(&name)
+                        .and_then(|field| field.get_attribute::<EntryTitle>())
+                        .expect("title")
+                        .0
+                }
+            }
+            input {
+                style: "width: 90%;",
+                display: "block",
+                name: name.as_str(),
+                placeholder: APP_SETTINGS_INFO
+                    .field(&name)
+                    .and_then(|field| field.get_attribute::<EntryPlaceholder>())
+                    .map(|placeholder| placeholder.0)
+                    .unwrap_or_default(),
+                "type": "url",
+                value: initial_settings
+                    .read()
+                    .as_ref()
+                    .and_then(|settings| settings.get_field::<Option<String>>(&name))
+                    .and_then(|field| field.clone()),
+            }
+        }
+    }
+
+    let entries = APP_SETTINGS_INFO.iter().map(|field| {
+        rsx! {
+            SettingsEntry { name: field.name(), initial_settings }
+        }
     });
 
     rsx! {
@@ -118,15 +188,14 @@ pub fn SettingsPage(settings: Signal<AppSettings>, current_page: Signal<String>)
                 margin: "20px",
                 onsubmit: move |ev| {
                     ev.stop_propagation();
-                    info!("Got: {:?}", ev.values());
-                    for (name, val) in ev.values().iter() {
-                        if name == "custom_extensions_url" {
-                            settings.write().custom_extensions_url = match val.0[0].clone() {
-                                val if val.is_empty() => None,
-                                val => Some(val),
-                            };
+                    let mut current_settings = settings.write();
+                    for (name, mut val) in ev.values().into_iter() {
+                        if let Some(field) = current_settings.get_field_mut::<Option<String>>(&name)
+                        {
+                            *field = val.0.drain(0..).next();
                         }
                     }
+                    drop(current_settings);
                     spawn(async move {
                         let store = store_load("storage.json").await;
                         let to_save = serde_wasm_bindgen::to_value::<AppSettings>(&settings.read())
@@ -134,18 +203,7 @@ pub fn SettingsPage(settings: Signal<AppSettings>, current_page: Signal<String>)
                         store.set("settings", to_save).await;
                     });
                 },
-                p { "Custom Tachiyomi Extensions Download URL" }
-                input {
-                    style: "width: 90%;",
-                    display: "block",
-                    name: "custom_extensions_url",
-                    placeholder: "https://raw.githubusercontent.com/keiyoushi/extensions/repo/index.min.json",
-                    "type": "url",
-                    value: match &*initial_settings.read() {
-                        Some(settings) => settings.custom_extensions_url.clone().unwrap_or_default(),
-                        None => String::new(),
-                    },
-                }
+                {entries}
                 button { "Save" }
             }
         }
@@ -223,7 +281,7 @@ pub fn App() -> Element {
 
     rsx! {
         link { rel: "stylesheet", href: "/assets/styles.css" }
-        main { class: "container",
+        main { class: "container", height: "100%",
             AppPage { current_page, page_id: "convert",
 
                 h1 { "Nekotatsu" }
