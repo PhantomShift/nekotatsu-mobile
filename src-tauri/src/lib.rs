@@ -181,6 +181,10 @@ async fn pick_save_path(
     if let Some(file_path) = app
         .dialog()
         .file()
+        .set_file_name(format!(
+            "nekotatsu_converted_{}.zip",
+            chrono::Local::now().format("%Y.%m.%d_%H.%M.%S")
+        ))
         .add_filter("Zip File", &["zip"])
         .blocking_save_file()
     {
