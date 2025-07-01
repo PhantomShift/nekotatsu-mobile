@@ -49,16 +49,59 @@ struct TauriEvent<T> {
 struct EntryPlaceholder(&'static str);
 #[derive(Reflect)]
 struct EntryTitle(&'static str);
+#[derive(Reflect)]
+struct EntryFileName(&'static str);
 
 #[derive(Debug, Reflect, Serialize, Deserialize, Clone, Default)]
 pub struct AppSettings {
     #[reflect(@EntryPlaceholder("https://github.com/keiyoushi/extensions/raw/refs/heads/repo/index.min.json"))]
     #[reflect(@EntryTitle("Tachiyomi Sources URL"))]
+    #[reflect(@EntryFileName("tachi_sources.json"))]
     pub custom_extensions_url: Option<String>,
 
     #[reflect(@EntryPlaceholder("https://github.com/KotatsuApp/kotatsu-parsers/archive/refs/heads/master.zip"))]
     #[reflect(@EntryTitle("Kotatsu Parsers URL"))]
+    #[reflect(@EntryFileName("kotatsu_parsers.zip"))]
     pub custom_parsers_url: Option<String>,
+}
+
+static APP_SETTINGS_INFO: LazyLock<&StructInfo> = LazyLock::new(|| {
+    AppSettings::type_info()
+        .as_struct()
+        .expect("AppSettings should be a struct")
+});
+
+macro_rules! json_value {
+    ($($value:tt)+) => {
+        serde_wasm_bindgen::to_value(&json!($($value)+)).expect("should be valid json")
+    };
+}
+
+macro_rules! busy_run {
+    ($task:block, $busy_signal:ident, $busy_message:expr) => {
+        if !*$busy_signal.read() {
+            $busy_signal.set(true);
+            spawn(async move {
+                {
+                    $task
+                };
+                $busy_signal.set(false);
+            });
+        } else {
+            spawn(async move {
+                invoke("plugin:dialog|message",
+                    serde_wasm_bindgen::to_value(
+                        &json!({
+                            "message": $busy_message,
+                            "options": {
+                                "title": "Busy"
+                            }
+                        })
+                    ).expect("should be valid json")
+                ).await;
+            });
+        }
+    };
 }
 
 #[component]
@@ -128,12 +171,6 @@ pub fn LogsPage(current_page: Signal<String>, mut log: Signal<String>) -> Elemen
 
 #[component]
 pub fn SettingsPage(settings: Signal<AppSettings>, current_page: Signal<String>) -> Element {
-    static APP_SETTINGS_INFO: LazyLock<&StructInfo> = LazyLock::new(|| {
-        AppSettings::type_info()
-            .as_struct()
-            .expect("AppSettings should be a struct")
-    });
-
     let initial_settings = use_resource(move || async move {
         let store = store_load("storage.json").await;
         store
@@ -210,6 +247,62 @@ pub fn SettingsPage(settings: Signal<AppSettings>, current_page: Signal<String>)
     }
 }
 
+#[component]
+fn DownloadPage(
+    settings: Signal<AppSettings>,
+    current_page: Signal<String>,
+    busy: Signal<bool>,
+) -> Element {
+    let entries: Vec<_> = APP_SETTINGS_INFO
+        .iter()
+        .map(|field| {
+            let mut status = use_signal(|| false);
+            let file_name = field.get_attribute::<EntryFileName>().expect("setting missing file name").0;
+            use_future(move || async move {
+                let exists = try_invoke(
+                    "file_exists",
+                    json_value!({ "fileName": file_name }),
+                )
+                .await.unwrap().as_bool();
+                *status.write() = exists.is_some_and(|e| e);
+            });
+            rsx! {
+                div {
+                    display: "flex",
+                    align_content: "center",
+                    align_items: "center",
+                    justify_content: "stretch",
+                    span { {if *status.read() { "✅" } else { "❌" }} }
+                    p { flex_grow: "1", align_content: "left",
+                        {field.get_attribute::<EntryTitle>().expect("setting mission title").0}
+                    }
+                    button {
+                        // Holy minified JavaScript Batman, this is what Dioxus auto format writes!
+                        onclick: move |ev| {
+                            ev.stop_propagation();
+                            busy_run!(
+                                { let link = settings.read().get_field::< Option < String >> (field.name())
+                                .map(Option::to_owned).or_else(|| field.get_attribute::< EntryPlaceholder >
+                                ().map(| placeholder | Some(placeholder.0.to_string()))).flatten()
+                                .expect("failed to get link"); let _ = try_invoke("request_download",
+                                json_value!({ "fileName" : file_name, "link" : link })). await; let exists =
+                                try_invoke("file_exists", json_value!({ "fileName" : file_name })). await
+                                .unwrap().as_bool(); * status.write() = exists.is_some_and(| e | e); }, busy,
+                                "Cannot download, currently busy."
+                            )
+                        },
+                        "Download"
+                    }
+                }
+            }
+        })
+        .collect();
+
+    rsx! {
+        AppPage { current_page, page_id: "download", {entries.iter()} }
+    }
+}
+
 pub fn App() -> Element {
     let mut picked_backup = use_signal(String::new);
     let mut picked_save_path = use_signal(String::new);
@@ -252,65 +345,18 @@ pub fn App() -> Element {
     // and shouldn't realistically matter
     let mut busy = use_signal(|| false);
 
-    macro_rules! busy_run {
-        ($task:block, $busy_message:expr) => {
-            if !*busy.read() {
-                busy.set(true);
-                spawn(async move {
-                    {
-                        $task
-                    };
-                    busy.set(false);
-                });
-            } else {
-                spawn(async move {
-                    invoke("plugin:dialog|message",
-                        serde_wasm_bindgen::to_value(
-                            &json!({
-                                "message": $busy_message,
-                                "options": {
-                                    "title": "Busy"
-                                }
-                            })
-                        ).expect("should be valid json")
-                    ).await;
-                });
-            }
-        };
-    }
-
     rsx! {
         link { rel: "stylesheet", href: "/assets/styles.css" }
         main { class: "container", height: "100%",
             AppPage { current_page, page_id: "convert",
 
                 h1 { "Nekotatsu" }
-                div {
-                    button {
-                        onclick: move |_| {
-                            busy_run!(
-                                { let _ = try_invoke("download_tachi_sources", JsValue::null()). await; },
-                                "Cannot download, busy with other operations"
-                            )
-                        },
-                        "Download Tachiyomi Sources"
-                    }
-                    button {
-                        onclick: move |_| {
-                            busy_run!(
-                                { let _ = try_invoke("update_kotatsu_parsers", JsValue::null()). await; },
-                                "Cannot update, busy with other operations"
-                            )
-                        },
-                        "Update Kotatsu Parsers"
-                    }
-                }
                 div { display: "flex", flex_direction: "column",
                     button {
                         onclick: move |_| {
                             busy_run!(
                                 { let res = invoke("pick_backup", JsValue::null()). await; if let Some(path)
-                                = res.as_string() { picked_backup.set(path); } },
+                                = res.as_string() { picked_backup.set(path); } }, busy,
                                 "Busy with other operations"
                             )
                         },
@@ -326,7 +372,7 @@ pub fn App() -> Element {
                         onclick: move |_| {
                             busy_run!(
                                 { let res = invoke("pick_save_path", JsValue::null()). await; if let
-                                Some(path) = res.as_string() { picked_save_path.set(path); } },
+                                Some(path) = res.as_string() { picked_save_path.set(path); } }, busy,
                                 "Busy with other operations"
                             )
                         },
@@ -343,7 +389,7 @@ pub fn App() -> Element {
                     button {
                         onclick: move |_| {
                             busy_run!(
-                                { let _ = try_invoke("convert_backup", JsValue::null()). await; },
+                                { let _ = try_invoke("convert_backup", JsValue::null()). await; }, busy,
                                 "Busy with other operations, please wait"
                             )
                         },
@@ -351,6 +397,7 @@ pub fn App() -> Element {
                     }
                 }
             }
+            DownloadPage { settings, current_page, busy }
             LogsPage { log: logs, current_page }
             SettingsPage { current_page, settings }
             AppPage { current_page, page_id: "about",
@@ -372,6 +419,7 @@ pub fn App() -> Element {
                 current_page,
                 ids: vec![
                     ("convert", "Convert"),
+                    ("download", "Download"),
                     ("logs", "Logs"),
                     ("settings", "Settings"),
                     ("about", "About"),

@@ -1,12 +1,12 @@
 use std::{
     fs::File,
     io::{BufWriter, Write},
-    path::Path,
+    path::{Path, PathBuf},
     sync::Mutex,
 };
 
 use serde::{Deserialize, Serialize};
-use tauri::{http::StatusCode, AppHandle, Emitter, Manager};
+use tauri::{AppHandle, Emitter, Manager, http::StatusCode};
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons};
 use tauri_plugin_fs::{FilePath, FsExt, OpenOptions};
 use tauri_plugin_store::StoreExt;
@@ -98,15 +98,26 @@ async fn download_file(app: &AppHandle, link: &str, destination: &Path) -> Resul
     })
 }
 
-#[tauri::command]
-async fn download_tachi_sources(app: AppHandle) -> Result<(), String> {
+#[inline]
+fn get_file_path<S: AsRef<Path>>(app: &AppHandle, file_name: S) -> Result<PathBuf, String> {
     let mut path = app.path().app_local_data_dir().map_err(|e| e.to_string())?;
-    path.extend(&["tachi_sources.json"]);
+    path.extend(&[file_name]);
+    Ok(path)
+}
+
+#[tauri::command]
+fn file_exists(app: AppHandle, file_name: String) -> Result<bool, String> {
+    Ok(get_file_path(&app, file_name)?.exists())
+}
+
+#[tauri::command]
+async fn request_download(app: AppHandle, file_name: String, link: String) -> Result<(), String> {
+    let path = get_file_path(&app, &file_name)?;
 
     if path.exists() {
         let overwrite = app
             .dialog()
-            .message("Sources file already exist; overwrite?")
+            .message("File already exists; overwrite?")
             .buttons(MessageDialogButtons::OkCancel)
             .blocking_show();
         if !overwrite {
@@ -114,53 +125,24 @@ async fn download_tachi_sources(app: AppHandle) -> Result<(), String> {
         }
     }
 
-    let store = app.store("storage.json").expect("store should be openable");
+    let mut file = download_file(&app, &link, &path).await?;
 
-    let link = store
-        .get("settings")
-        .map(|val| serde_json::from_value::<AppSettings>(val).unwrap_or_default())
-        .and_then(|settings| settings.custom_extensions_url)
-        .unwrap_or(TACHI_DOWNLOAD_LINK.to_string());
-
-    download_file(&app, &link, &path).await.map(|_| ())
-}
-
-#[tauri::command]
-async fn update_kotatsu_parsers(app: AppHandle) -> Result<(), String> {
-    let mut path = app.path().app_local_data_dir().map_err(|e| e.to_string())?;
-    path.extend(&["kotatsu_parsers.zip"]);
-
-    let should_download = !path.exists() || {
-        app.dialog()
-            .message("Parsers repo already downloaded; download again?")
-            .buttons(MessageDialogButtons::OkCancel)
-            .blocking_show()
-    };
-    if should_download {
-        let store = app.store("storage.json").expect("store should be openable");
-        let link = store
-            .get("settings")
-            .map(|val| serde_json::from_value::<AppSettings>(val).unwrap_or_default())
-            .and_then(|settings| settings.custom_parsers_url)
-            .unwrap_or(KOTATSU_DOWNLOAD_LINK.to_string());
-
-        let mut zipfile = download_file(&app, &link, &path).await?;
-        zipfile.flush().map_err(|e| e.to_string())?;
-        drop(zipfile);
+    if &file_name != "kotatsu_parsers.zip" {
+        return Ok(());
     }
+
+    file.flush().map_err(|e| e.to_string())?;
+    drop(file);
 
     let zipfile = app
         .fs()
         .open(&path, OpenOptions::new().read(true).to_owned())
         .map_err(|e| e.to_string())?;
 
-    let mut json_path = app.path().app_local_data_dir().map_err(|e| e.to_string())?;
-    json_path.extend(&["kotatsu_parsers.json"]);
-
     let parsers_file = app
         .fs()
         .open(
-            json_path,
+            get_file_path(&app, "kotatsu_parsers.json")?,
             OpenOptions::new()
                 .write(true)
                 .truncate(true)
@@ -381,8 +363,8 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .manage(Mutex::new(PathState::default()))
         .invoke_handler(tauri::generate_handler![
-            download_tachi_sources,
-            update_kotatsu_parsers,
+            file_exists,
+            request_download,
             pick_backup,
             pick_save_path,
             convert_backup,
