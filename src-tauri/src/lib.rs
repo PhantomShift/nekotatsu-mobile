@@ -9,17 +9,12 @@ use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager, http::StatusCode};
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons};
 use tauri_plugin_fs::{FilePath, FsExt, OpenOptions};
-use tauri_plugin_store::StoreExt;
-
-static TACHI_DOWNLOAD_LINK: &str =
-    "https://raw.githubusercontent.com/keiyoushi/extensions/repo/index.min.json";
-static KOTATSU_DOWNLOAD_LINK: &str =
-    "https://github.com/KotatsuApp/kotatsu-parsers/archive/refs/heads/master.zip";
 
 #[derive(Serialize, Deserialize, Clone, Default)]
 pub struct AppSettings {
     pub custom_extensions_url: Option<String>,
     pub custom_parsers_url: Option<String>,
+    pub custom_fixer_url: Option<String>,
 }
 
 #[derive(Default)]
@@ -216,8 +211,7 @@ async fn convert_backup(
     app: AppHandle,
     state: tauri::State<'_, Mutex<PathState>>,
 ) -> Result<(), String> {
-    let mut sources_path = app.path().app_local_data_dir().map_err(|e| e.to_string())?;
-    sources_path.extend(&["tachi_sources.json"]);
+    let sources_path = get_file_path(&app, "tachi_sources.json")?;
     if !sources_path.exists() {
         app.dialog()
             .message("Tachiyomi source list not downloaded")
@@ -225,13 +219,22 @@ async fn convert_backup(
         return Ok(());
     }
 
-    let mut parsers_path = app.path().app_local_data_dir().map_err(|e| e.to_string())?;
-    parsers_path.extend(&["kotatsu_parsers.json"]);
+    let parsers_path = get_file_path(&app, "kotatsu_parsers.json")?;
     if !parsers_path.exists() {
         app.dialog()
             .message("Kotatsu parsers list not downloaded")
             .blocking_show();
         return Ok(());
+    }
+
+    let fixers_path = get_file_path(&app, "correction.luau")?;
+    if !fixers_path.exists() {
+        let r#continue = app.dialog().message("Fixer script not downloaded. The built-in script may be outdated. Continue anyways?")
+            .buttons(MessageDialogButtons::YesNo)
+            .blocking_show();
+        if !r#continue {
+            return Ok(());
+        }
     }
 
     let state = state.lock().map_err(|e| e.to_string())?;
@@ -267,6 +270,14 @@ async fn convert_backup(
                             .blocking_show();
                         e.to_string()
                     })?;
+            let converter = if fixers_path.exists() {
+                converter.with_runtime(
+                    nekotatsu_core::script_interface::ScriptRuntime::from_chunk(fixers_path)
+                        .map_err(|e| e.to_string())?,
+                )
+            } else {
+                converter
+            };
 
             let logger = AppLogger { app: app.clone() };
             let result = nekotatsu_core::tracing::subscriber::with_default(

@@ -63,6 +63,11 @@ pub struct AppSettings {
     #[reflect(@EntryTitle("Kotatsu Parsers URL"))]
     #[reflect(@EntryFileName("kotatsu_parsers.zip"))]
     pub custom_parsers_url: Option<String>,
+
+    #[reflect(@EntryPlaceholder("https://raw.githubusercontent.com/phantomshift/nekotatsu/master/nekotatsu-core/src/correction.luau"))]
+    #[reflect(@EntryTitle("Fixer Script URL"))]
+    #[reflect(@EntryFileName("correction.luau"))]
+    pub custom_fixer_url: Option<String>,
 }
 
 static APP_SETTINGS_INFO: LazyLock<&StructInfo> = LazyLock::new(|| {
