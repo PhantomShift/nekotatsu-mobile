@@ -111,11 +111,16 @@ macro_rules! busy_run {
 
 #[component]
 pub fn AppPage(page_id: String, current_page: Signal<String>, children: Element) -> Element {
+    let is_current = move || current_page.read().to_owned() == page_id;
+
     rsx! {
         div {
-            hidden: current_page.read().to_owned() != page_id,
+            hidden: !is_current(),
+            display: if is_current() { "flex" } else { "none" },
+            flex_direction: "column",
             height: "100%",
             padding: "1em",
+            overflow: "hidden",
             {children}
         }
     }
@@ -146,21 +151,21 @@ pub fn LogsPage(current_page: Signal<String>, mut log: Signal<String>) -> Elemen
     rsx! {
         AppPage { current_page, page_id: "logs",
             div {
-                height: "100%",
                 align_content: "center",
                 display: "flex",
+                flex_grow: 1,
                 flex_direction: "column",
+                overflow: "hidden",
                 h1 { "Logs" }
-                p {
+                div {
                     display: "flex",
                     flex_grow: 1,
                     class: "light-contrast",
-                    overflow: "auto",
-                    // height: "200px",
+                    overflow_y: "scroll",
                     text_align: "left",
                     overflow_wrap: "anywhere",
-                    padding: "20px",
-                    pre { "{log}" }
+                    padding: "16px",
+                    pre { white_space: "pre-wrap", "{log}" }
                 }
                 button {
                     onclick: move |_| {
@@ -188,30 +193,32 @@ pub fn SettingsPage(settings: Signal<AppSettings>, current_page: Signal<String>)
     #[component]
     fn SettingsEntry(name: String, initial_settings: Resource<AppSettings>) -> Element {
         rsx! {
-            p {
-                {
-                    APP_SETTINGS_INFO
-                        .field(&name)
-                        .and_then(|field| field.get_attribute::<EntryTitle>())
-                        .expect("title")
-                        .0
+            div {
+                span {
+                    {
+                        APP_SETTINGS_INFO
+                            .field(&name)
+                            .and_then(|field| field.get_attribute::<EntryTitle>())
+                            .expect("title")
+                            .0
+                    }
                 }
-            }
-            input {
-                style: "width: 90%;",
-                display: "block",
-                name: name.as_str(),
-                placeholder: APP_SETTINGS_INFO
-                    .field(&name)
-                    .and_then(|field| field.get_attribute::<EntryPlaceholder>())
-                    .map(|placeholder| placeholder.0)
-                    .unwrap_or_default(),
-                "type": "url",
-                value: initial_settings
-                    .read()
-                    .as_ref()
-                    .and_then(|settings| settings.get_field::<Option<String>>(&name))
-                    .and_then(|field| field.clone()),
+                input {
+                    style: "width: 90%;",
+                    display: "block",
+                    name: name.as_str(),
+                    placeholder: APP_SETTINGS_INFO
+                        .field(&name)
+                        .and_then(|field| field.get_attribute::<EntryPlaceholder>())
+                        .map(|placeholder| placeholder.0)
+                        .unwrap_or_default(),
+                    "type": "url",
+                    value: initial_settings
+                        .read()
+                        .as_ref()
+                        .and_then(|settings| settings.get_field::<Option<String>>(&name))
+                        .and_then(|field| field.clone()),
+                }
             }
         }
     }
@@ -245,7 +252,7 @@ pub fn SettingsPage(settings: Signal<AppSettings>, current_page: Signal<String>)
                         store.set("settings", to_save).await;
                     });
                 },
-                {entries}
+                div { display: "flex", flex_direction: "column", gap: "16px", {entries} }
                 button { "Save" }
             }
         }
@@ -273,13 +280,20 @@ fn DownloadPage(
             });
             rsx! {
                 div {
+                    class: "download_status",
                     display: "flex",
                     align_content: "center",
                     align_items: "center",
                     justify_content: "stretch",
-                    span { {if *status.read() { "✅" } else { "❌" }} }
-                    p { flex_grow: "1", align_content: "left",
-                        {field.get_attribute::<EntryTitle>().expect("setting mission title").0}
+                    span { {if *status.read() { "✅" } else { "🚫" }} }
+                    p { flex_grow: "1", text_align: "start",
+                        {
+                            field
+                                .get_attribute::<EntryTitle>()
+                                .expect("setting mission title")
+                                .0
+                                .trim_end_matches(" URL")
+                        }
                     }
                     button {
                         // Holy minified JavaScript Batman, this is what Dioxus auto format writes!

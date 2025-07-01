@@ -51,6 +51,14 @@ html, body {
   justify-content: center;
 }
 
+.download_status {
+  display: flex;
+  align-content: center;
+  align-items: center;
+  justify-content: stretch;
+  gap: 4px 1em;
+}
+
 a {
   font-weight: 500;
   color: #646cff;
