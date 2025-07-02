@@ -21,6 +21,13 @@ need to use this tool a lot over an extended period of time.
 To convert, download the sources and parsers lists,
 then pick the backup and save paths and hit convert.
 
+> [!Note]
+> It is fully expected that when you pick the backup and/or save path on Android,
+> the `content://[path]` is not particularly recognizable as what you picked.
+> Currently there's no simple way to get around this,
+> but rest assured that it will get and convert the files you picked correctly.
+
+
 If an extension list other than the Keiyoshi one was used when you created your Tachiyomi backup,
 open the settings and set the url for the relevant `index.min.json` to download.
 
