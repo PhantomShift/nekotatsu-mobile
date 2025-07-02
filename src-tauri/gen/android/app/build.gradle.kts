@@ -67,6 +67,14 @@ android {
     buildFeatures {
         buildConfig = true
     }
+    applicationVariants.all {
+        val variant = this
+        outputs.forEach { output ->
+            if (output is com.android.build.gradle.internal.api.BaseVariantOutputImpl) {
+                output.outputFileName = "nekotatsu-mobile-v${variant.versionName}-${variant.baseName}.apk"
+            }
+        }
+    }
 }
 
 rust {
