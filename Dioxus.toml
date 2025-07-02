@@ -10,3 +10,6 @@ title = "Tauri + Dioxus App"
 [web.watcher]
 reload_html = true
 watch_path = ["src", "assets"]
+
+[web.wasm_opt]
+level = "z"
