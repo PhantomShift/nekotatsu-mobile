@@ -45,11 +45,11 @@ struct TauriEvent<T> {
     payload: T,
 }
 
-#[derive(Reflect)]
+#[derive(Debug, Reflect)]
 struct EntryPlaceholder(&'static str);
-#[derive(Reflect)]
+#[derive(Debug, Reflect)]
 struct EntryTitle(&'static str);
-#[derive(Reflect)]
+#[derive(Debug, Reflect)]
 struct EntryFileName(&'static str);
 
 #[derive(Debug, Reflect, Serialize, Deserialize, Clone, Default)]
@@ -278,6 +278,7 @@ fn DownloadPage(
                 .await.unwrap().as_bool();
                 *status.write() = exists.is_some_and(|e| e);
             });
+            info!("{}, {:?}", field.name(), field.get_attribute::<EntryPlaceholder>());
             rsx! {
                 div {
                     class: "download_status",
@@ -301,8 +302,8 @@ fn DownloadPage(
                             ev.stop_propagation();
                             busy_run!(
                                 { let link = settings.read().get_field::< Option < String >> (field.name())
-                                .map(Option::to_owned).or_else(|| field.get_attribute::< EntryPlaceholder >
-                                ().map(| placeholder | Some(placeholder.0.to_string()))).flatten()
+                                .and_then(Option::to_owned).or_else(|| field.get_attribute::<
+                                EntryPlaceholder > ().map(| placeholder | placeholder.0.to_string()))
                                 .expect("failed to get link"); let _ = try_invoke("request_download",
                                 json_value!({ "fileName" : file_name, "link" : link })). await; let exists =
                                 try_invoke("file_exists", json_value!({ "fileName" : file_name })). await
