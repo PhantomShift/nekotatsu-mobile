@@ -188,16 +188,20 @@ async fn pick_save_path(
         .add_filter("Zip File", &["zip"])
         .blocking_save_file()
     {
-        let extension_matches = match file_path.clone() {
-            FilePath::Path(path) => path.extension().is_some_and(|ext| ext == "zip"),
-            FilePath::Url(url) => url.as_str().ends_with(".zip"),
-        };
-        if !extension_matches {
-            app.dialog()
-                .message("File must be a .zip file")
-                .blocking_show();
-            return Ok(None);
+        #[cfg(not(target_os = "android"))]
+        {
+            let extension_matches = match &file_path {
+                FilePath::Path(path) => path.extension().is_some_and(|ext| ext == "zip"),
+                FilePath::Url(url) => url.as_str().ends_with(".zip"),
+            };
+            if !extension_matches {
+                app.dialog()
+                    .message("File must be a .zip file")
+                    .blocking_show();
+                return Ok(None);
+            };
         }
+
         state
             .lock()
             .as_mut()
